@@ -33,6 +33,10 @@ const App: React.FC = () => {
   // -- Calculator State --
   const [calcInput, setCalcInput] = useState<string>('');
 
+  // -- Checklist Input State --
+  const [checklistInput, setChecklistInput] = useState('');
+  const [checklistCategory, setChecklistCategory] = useState<'Luggage' | 'Gift'>('Luggage');
+
   // -- Edit Modal State --
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Partial<ItineraryItem>>({});
@@ -64,7 +68,7 @@ const App: React.FC = () => {
   };
 
   const handleDeleteEvent = (itemId: string) => {
-      if(!confirm("確定要刪除這個行程嗎？")) return;
+      if(!window.confirm("確定要刪除這個行程嗎？")) return;
       
       const newSchedule = schedule.map(day => {
           if (day.date === selectedDate) {
@@ -79,7 +83,7 @@ const App: React.FC = () => {
       if (!editingItem.title || !editDayDate) return;
 
       const newItem: ItineraryItem = {
-          id: editingItem.id || Date.now().toString(),
+          id: editingItem.id || `evt-${Date.now()}`,
           startTime: editingItem.startTime || '00:00',
           endTime: editingItem.endTime,
           title: editingItem.title,
@@ -119,7 +123,7 @@ const App: React.FC = () => {
     const jpy = parseInt(calcInput);
     const twd = Math.round(jpy * 0.22); // Mock rate
     const newItem: ExpenseItem = {
-        id: Date.now().toString(),
+        id: `exp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         title: '快速記帳',
         category: 'Shopping',
         amountJPY: jpy,
@@ -130,8 +134,39 @@ const App: React.FC = () => {
     setCalcInput('');
   };
 
+  const handleDeleteExpense = (id: string, event?: React.MouseEvent) => {
+    // Explicitly prevent event propagation to avoid any bubbling issues
+    if (event) {
+        event.stopPropagation();
+    }
+    
+    // Use a clean filter function to avoid variable shadowing
+    if (window.confirm('確定要刪除這筆記帳嗎？')) {
+        setExpenses(currentExpenses => currentExpenses.filter(item => item.id !== id));
+    }
+  };
+
+  // -- Checklist Actions --
   const toggleCheck = (id: string) => {
     setChecklist(prev => prev.map(item => item.id === id ? { ...item, checked: !item.checked } : item));
+  };
+
+  const handleAddChecklist = () => {
+    if (!checklistInput.trim()) return;
+    const newItem: ChecklistItem = {
+        id: `chk-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        label: checklistInput,
+        checked: false,
+        category: checklistCategory
+    };
+    setChecklist(prev => [newItem, ...prev]);
+    setChecklistInput('');
+  };
+
+  const handleDeleteChecklist = (id: string) => {
+    if (window.confirm('確定要刪除這個項目嗎？')) {
+        setChecklist(prev => prev.filter(i => i.id !== id));
+    }
   };
 
   // -- Modal Render --
@@ -314,7 +349,7 @@ const App: React.FC = () => {
   );
 
   const renderMoney = () => (
-    <div className="p-4 flex flex-col h-full pb-24">
+    <div className="p-4 flex flex-col min-h-full pb-24">
         {/* Display */}
         <div className="bg-ind-black p-6 border-ind shadow-hard mb-6 text-right">
             <div className="text-gray-400 font-mono text-sm mb-1">JPY INPUT</div>
@@ -351,18 +386,25 @@ const App: React.FC = () => {
         </div>
 
         {/* History List */}
-        <div className="flex-1 overflow-auto">
+        <div className="mt-2">
             <h3 className="font-black border-b-2 border-ind-black mb-2">HISTORY</h3>
-            {expenses.map(e => (
-                <div key={e.id} className="flex justify-between items-center py-2 border-b border-gray-300">
-                    <div>
-                        <div className="font-bold text-sm">{e.title}</div>
-                        <div className="text-xs text-gray-500">{e.date}</div>
+            {expenses.map((expense) => (
+                <div key={expense.id} className="flex justify-between items-center py-3 border-b border-gray-300 group">
+                    <div className="flex-1">
+                        <div className="font-bold text-sm">{expense.title}</div>
+                        <div className="text-xs text-gray-500">{expense.date}</div>
                     </div>
-                    <div className="text-right">
-                        <div className="font-mono font-bold">¥{e.amountJPY}</div>
-                        <div className="font-mono text-xs text-gray-500">NT${e.amountTWD}</div>
+                    <div className="text-right mr-3">
+                        <div className="font-mono font-bold">¥{expense.amountJPY}</div>
+                        <div className="font-mono text-xs text-gray-500">NT${expense.amountTWD}</div>
                     </div>
+                    <button 
+                        onClick={(event) => handleDeleteExpense(expense.id, event)}
+                        className="text-gray-400 hover:text-red-600 p-3 -mr-2 active:scale-95 transition-transform"
+                        aria-label="Delete"
+                    >
+                        <Trash2 size={20} />
+                    </button>
                 </div>
             ))}
         </div>
@@ -372,6 +414,35 @@ const App: React.FC = () => {
   const renderBag = () => (
     <div className="p-4 pb-24">
         <h2 className="text-3xl font-black mb-6">CHECKLIST</h2>
+
+        {/* Add New Item Area */}
+        <div className="bg-white border-ind shadow-hard p-4 mb-8">
+            <h3 className="text-sm font-black uppercase mb-2">ADD NEW ITEM</h3>
+            <div className="flex gap-2 mb-2">
+                <input 
+                    value={checklistInput}
+                    onChange={(e) => setChecklistInput(e.target.value)}
+                    placeholder="項目名稱..."
+                    className="flex-1 border-2 border-ind-black p-2 font-bold text-sm focus:outline-none focus:shadow-hard transition-shadow"
+                />
+            </div>
+            <div className="flex gap-2">
+                 <select 
+                    value={checklistCategory}
+                    onChange={(e) => setChecklistCategory(e.target.value as any)}
+                    className="border-2 border-ind-black p-2 font-bold text-sm bg-white focus:outline-none"
+                 >
+                    <option value="Luggage">LUGGAGE</option>
+                    <option value="Gift">GIFT</option>
+                 </select>
+                 <button 
+                    onClick={handleAddChecklist}
+                    className="flex-1 bg-ind-orange border-2 border-ind-black font-black text-sm active:translate-y-1 active:shadow-none shadow-hard-sm"
+                 >
+                    ADD
+                 </button>
+            </div>
+        </div>
         
         {['Luggage', 'Gift'].map(cat => (
             <div key={cat} className="mb-8">
@@ -381,12 +452,18 @@ const App: React.FC = () => {
                         <div 
                             key={item.id} 
                             onClick={() => toggleCheck(item.id)}
-                            className={`flex items-center p-3 border-ind shadow-hard transition-all cursor-pointer ${item.checked ? 'bg-ind-gray opacity-60' : 'bg-white'}`}
+                            className={`flex items-center p-3 border-ind shadow-hard transition-all cursor-pointer group ${item.checked ? 'bg-ind-gray opacity-60' : 'bg-white'}`}
                         >
                             <div className={`w-6 h-6 border-2 border-ind-black mr-3 flex items-center justify-center ${item.checked ? 'bg-ind-orange' : 'white'}`}>
                                 {item.checked && <CheckSquare size={16} />}
                             </div>
-                            <span className={`font-bold ${item.checked ? 'line-through' : ''}`}>{item.label}</span>
+                            <span className={`font-bold flex-1 ${item.checked ? 'line-through' : ''}`}>{item.label}</span>
+                             <button 
+                                onClick={(e) => { e.stopPropagation(); handleDeleteChecklist(item.id); }}
+                                className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                            >
+                                <Trash2 size={16} />
+                            </button>
                         </div>
                     ))}
                 </div>
