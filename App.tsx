@@ -3,25 +3,117 @@ import Countdown from './components/Countdown';
 import WeatherCard from './components/WeatherCard';
 import ItineraryTimeline from './components/ItineraryTimeline';
 import Concierge from './components/Concierge';
-import { ViewState, ExpenseItem, ChecklistItem } from './types';
+import { ViewState, ExpenseItem, ChecklistItem, DaySchedule, ItineraryItem, ActivityType } from './types';
 import { ITINERARY, INITIAL_EXPENSES, INITIAL_CHECKLIST } from './constants';
-import { ArrowLeft, Calculator, CheckSquare, Plus, Trash2, JapaneseYen, Map, User, Home as HomeIcon } from 'lucide-react';
+import { ArrowLeft, Calculator, CheckSquare, Plus, Trash2, JapaneseYen, Map, User, Home as HomeIcon, X, Save } from 'lucide-react';
+
+// Industrial Input Component
+const IndInput = ({ label, value, onChange, type = "text", placeholder = "" }: any) => (
+    <div className="mb-3">
+        <label className="block text-xs font-black uppercase mb-1">{label}</label>
+        <input 
+            type={type} 
+            value={value} 
+            onChange={onChange} 
+            placeholder={placeholder}
+            className="w-full bg-white border-2 border-ind-black p-2 font-bold focus:outline-none focus:shadow-hard transition-shadow"
+        />
+    </div>
+);
 
 const App: React.FC = () => {
   const [view, setView] = useState<ViewState>('home');
   const [selectedDate, setSelectedDate] = useState<string>(ITINERARY[0].date);
   
-  // Data State
+  // -- Data State --
+  const [schedule, setSchedule] = useState<DaySchedule[]>(ITINERARY);
   const [expenses, setExpenses] = useState<ExpenseItem[]>(INITIAL_EXPENSES);
   const [checklist, setChecklist] = useState<ChecklistItem[]>(INITIAL_CHECKLIST);
   
-  // Calculator State
+  // -- Calculator State --
   const [calcInput, setCalcInput] = useState<string>('');
-  
+
+  // -- Edit Modal State --
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<Partial<ItineraryItem>>({});
+  const [editDayDate, setEditDayDate] = useState<string>('');
+
   // -- Helper Functions --
-  const currentSchedule = ITINERARY.find(d => d.date === selectedDate) || ITINERARY[0];
+  const currentSchedule = schedule.find(d => d.date === selectedDate) || schedule[0];
   const totalSpentTWD = expenses.reduce((acc, curr) => acc + curr.amountTWD, 0);
 
+  // -- Itinerary Actions --
+  const handleEditEvent = (item: ItineraryItem) => {
+    setEditingItem(item);
+    setEditDayDate(selectedDate);
+    setIsModalOpen(true);
+  };
+
+  const handleCreateEvent = () => {
+    setEditingItem({
+        id: '',
+        type: ActivityType.Sightseeing,
+        startTime: '10:00',
+        endTime: '11:00',
+        title: '',
+        description: '',
+        location: { name: '', address: '' }
+    });
+    setEditDayDate(selectedDate);
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteEvent = (itemId: string) => {
+      if(!confirm("確定要刪除這個行程嗎？")) return;
+      
+      const newSchedule = schedule.map(day => {
+          if (day.date === selectedDate) {
+              return { ...day, items: day.items.filter(i => i.id !== itemId) };
+          }
+          return day;
+      });
+      setSchedule(newSchedule);
+  };
+
+  const handleSaveEvent = () => {
+      if (!editingItem.title || !editDayDate) return;
+
+      const newItem: ItineraryItem = {
+          id: editingItem.id || Date.now().toString(),
+          startTime: editingItem.startTime || '00:00',
+          endTime: editingItem.endTime,
+          title: editingItem.title,
+          type: editingItem.type as ActivityType,
+          description: editingItem.description || '',
+          transportMethod: editingItem.transportMethod,
+          location: {
+              name: editingItem.location?.name || '',
+              address: editingItem.location?.address || editingItem.location?.name || ''
+          }
+      };
+
+      const newSchedule = schedule.map(day => {
+          if (day.date === editDayDate) {
+              const existingIndex = day.items.findIndex(i => i.id === newItem.id);
+              let newItems = [...day.items];
+              
+              if (existingIndex >= 0) {
+                  newItems[existingIndex] = newItem;
+              } else {
+                  newItems.push(newItem);
+              }
+              // Sort by time
+              newItems.sort((a, b) => a.startTime.localeCompare(b.startTime));
+              return { ...day, items: newItems };
+          }
+          return day;
+      });
+
+      setSchedule(newSchedule);
+      setIsModalOpen(false);
+  };
+
+  // -- Calculator Actions --
   const handleAddExpense = () => {
     if (!calcInput) return;
     const jpy = parseInt(calcInput);
@@ -41,6 +133,81 @@ const App: React.FC = () => {
   const toggleCheck = (id: string) => {
     setChecklist(prev => prev.map(item => item.id === id ? { ...item, checked: !item.checked } : item));
   };
+
+  // -- Modal Render --
+  const renderEditModal = () => (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-ind-black/80 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-sm border-2 border-ind-black shadow-hard p-4 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-4 border-b-2 border-ind-black pb-2">
+                  <h3 className="text-xl font-black uppercase">
+                      {editingItem.id ? 'EDIT EVENT' : 'NEW EVENT'}
+                  </h3>
+                  <button onClick={() => setIsModalOpen(false)}>
+                      <X size={24} />
+                  </button>
+              </div>
+
+              <IndInput 
+                label="TITLE" 
+                value={editingItem.title} 
+                onChange={(e: any) => setEditingItem({...editingItem, title: e.target.value})} 
+                placeholder="行程名稱"
+              />
+
+              <div className="grid grid-cols-2 gap-2">
+                <IndInput 
+                    label="START TIME" 
+                    type="time"
+                    value={editingItem.startTime} 
+                    onChange={(e: any) => setEditingItem({...editingItem, startTime: e.target.value})} 
+                />
+                 <IndInput 
+                    label="END TIME" 
+                    type="time"
+                    value={editingItem.endTime} 
+                    onChange={(e: any) => setEditingItem({...editingItem, endTime: e.target.value})} 
+                />
+              </div>
+
+              <div className="mb-3">
+                  <label className="block text-xs font-black uppercase mb-1">TYPE</label>
+                  <select 
+                    className="w-full bg-white border-2 border-ind-black p-2 font-bold focus:outline-none focus:shadow-hard"
+                    value={editingItem.type}
+                    onChange={(e) => setEditingItem({...editingItem, type: e.target.value as ActivityType})}
+                  >
+                      {Object.values(ActivityType).map(t => (
+                          <option key={t} value={t}>{t}</option>
+                      ))}
+                  </select>
+              </div>
+              
+              <IndInput 
+                label="LOCATION / ADDRESS" 
+                value={editingItem.location?.name} 
+                onChange={(e: any) => setEditingItem({...editingItem, location: {name: e.target.value, address: e.target.value}})} 
+                placeholder="地點"
+              />
+
+              <div className="mb-3">
+                  <label className="block text-xs font-black uppercase mb-1">NOTE</label>
+                  <textarea 
+                    className="w-full bg-white border-2 border-ind-black p-2 font-bold focus:outline-none focus:shadow-hard h-20"
+                    value={editingItem.description}
+                    onChange={(e) => setEditingItem({...editingItem, description: e.target.value})}
+                    placeholder="備註..."
+                  />
+              </div>
+
+              <button 
+                onClick={handleSaveEvent}
+                className="w-full bg-ind-orange text-ind-black border-2 border-ind-black py-3 font-black shadow-hard active:translate-y-1 active:shadow-none transition-all flex justify-center items-center gap-2"
+              >
+                  <Save size={18} /> SAVE EVENT
+              </button>
+          </div>
+      </div>
+  );
 
   // -- Views --
 
@@ -109,7 +276,7 @@ const App: React.FC = () => {
     <div className="pb-24">
         {/* Date Tabs */}
         <div className="flex overflow-x-auto no-scrollbar border-b-2 border-ind-black bg-white sticky top-0 z-20">
-            {ITINERARY.map((day) => {
+            {schedule.map((day) => {
                 const isSelected = selectedDate === day.date;
                 const d = new Date(day.date);
                 return (
@@ -126,9 +293,22 @@ const App: React.FC = () => {
         </div>
 
         <div className="p-4">
-            <h2 className="text-3xl font-black italic mb-2 uppercase">{currentSchedule.dayLabel}</h2>
+            <div className="flex justify-between items-center mb-2">
+                <h2 className="text-3xl font-black italic uppercase">{currentSchedule.dayLabel}</h2>
+                <button 
+                    onClick={handleCreateEvent}
+                    className="bg-ind-black text-white p-2 border-2 border-ind-black shadow-hard-sm active:translate-y-1 active:shadow-none"
+                >
+                    <Plus size={20} />
+                </button>
+            </div>
+            
             <WeatherCard {...currentSchedule.weatherForecast} />
-            <ItineraryTimeline items={currentSchedule.items} />
+            <ItineraryTimeline 
+                items={currentSchedule.items} 
+                onEdit={handleEditEvent}
+                onDelete={handleDeleteEvent}
+            />
         </div>
     </div>
   );
@@ -218,6 +398,9 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#E5E5E5] text-ind-black font-sans max-w-md mx-auto shadow-2xl overflow-hidden relative border-x-2 border-ind-black">
       
+      {/* Edit Modal */}
+      {isModalOpen && renderEditModal()}
+
       {/* View Content */}
       <div className="h-full overflow-y-auto no-scrollbar pt-2">
         {view === 'home' && renderHome()}
@@ -242,10 +425,20 @@ const App: React.FC = () => {
              {/* Unified Action Button */}
              <button 
                 className="w-48 h-14 bg-ind-black text-white border-ind shadow-hard flex items-center justify-center space-x-2 active:translate-y-1 active:shadow-none transition-all"
-                onClick={() => setView('money')} // Default action for demo
+                onClick={() => {
+                    if (view === 'schedule') {
+                        handleCreateEvent();
+                    } else {
+                        setView('money');
+                    }
+                }} 
              >
-                <Plus size={20} className="text-ind-orange" />
-                <span className="font-black tracking-widest">RECORD</span>
+                {view === 'schedule' ? (
+                     <><Plus size={20} className="text-ind-orange" /><span className="font-black tracking-widest">ADD EVENT</span></>
+                ) : (
+                     <><Plus size={20} className="text-ind-orange" /><span className="font-black tracking-widest">RECORD</span></>
+                )}
+               
              </button>
 
              <div className="w-12"></div>
